@@ -51,7 +51,7 @@ with open('tfidf_vectorizer.pkl', 'wb') as f:
 final_data = netflix_data[['title', 'type']]
 final_data.to_csv('movie_data.csv', index=False)
 
-class FlixHub:
+class Movies:
     def __init__(self, df, cosine_sim):
         self.df = df
         self.cosine_sim = cosine_sim
@@ -85,8 +85,10 @@ class FlixHub:
         return idx[0] if len(idx) > 0 else -1
 
 # Example usage:
-flix_hub = FlixHub(final_data, cosine_sim)
-movies, tv_shows = flix_hub.recommendation('13 Reasons Why', total_result=10, threshold=0.5)
+movie_name = input("Enter a movie or TV show title: ")  # Prompt the user for input
+
+movie = Movies(final_data, cosine_sim)
+movies, tv_shows = movie.recommendation(movie_name, total_result=10, threshold=0.5)
 
 print('Similar Movie(s) list:')
 for movie in movies:
