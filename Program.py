@@ -1,99 +1,130 @@
 import string
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import pickle
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import warnings
 import re
 
-# Read data
+warnings.filterwarnings('ignore')
+
+# Load the Netflix dataset
 netflix_data = pd.read_csv(r"C:\Users\shez8\Desktop\RAHIL\Mini Projects\Movie Recommender\netflix_data.csv")
 netflix_data.fillna('', inplace=True)
 
-# Preprocess data
-netflix_data['description'] = netflix_data['description'].apply(lambda x: x.translate(str.maketrans('', '', string.punctuation)).lower())
+# Analyzing data distributions
+release_year_counts = netflix_data['release_year'].value_counts().sort_index()
+content_type_counts = netflix_data['type'].value_counts()
+top_countries = netflix_data['country'].value_counts().head(10)
 
-# Feature engineering
-new_data = netflix_data[['title', 'type', 'director', 'cast', 'rating', 'listed_in', 'description']]
-new_data.set_index('title', inplace=True)
+# Extracting ratings and durations
+rating_labels = list(netflix_data['rating'].value_counts().index)
+rating_values = list(netflix_data['rating'].value_counts().values)
 
+duration_labels = list(netflix_data['duration'].value_counts().index)
+duration_values = list(netflix_data['duration'].value_counts().values)
+
+# Generating word clouds for titles, descriptions, and genres
+all_titles = ' '.join(netflix_data['title'].values)
+title_wordcloud = WordCloud(background_color='black', colormap='Reds').generate(all_titles)
+
+all_descriptions = ' '.join(netflix_data['description'].values)
+description_wordcloud = WordCloud(background_color='black', colormap='Reds').generate(all_descriptions)
+
+all_genres = ' '.join(netflix_data['listed_in'].values)
+genre_wordcloud = WordCloud(background_color='black', colormap='Reds').generate(all_genres)
+
+# Prepare the dataset for text processing
+selected_data = netflix_data[['title', 'type', 'director', 'cast', 'rating', 'listed_in', 'description']]
+selected_data.set_index('title', inplace=True)
+
+# Helper class for text cleaning
 class TextCleaner:
-    def clean_text(self, text):
-        text = ' '.join(set(text.split(','))).lower()  # Remove duplicates (comma-separated) and lowercase
-        text = text.replace(' ', '')  # Remove spaces
-        text = text.translate(str.maketrans('', '', string.punctuation))  # Remove punctuation
+    def split_and_lower(self, text):
+        unique_parts = set()
+        for part in text.split(','):
+            unique_parts.add(part.strip().lower())
+        return ' '.join(unique_parts)
+
+    def compact_text(self, text):
+        return text.replace(' ', '').lower()
+
+    def clean_punctuation(self, text):
+        text = text.lower()
+        text = text.translate(str.maketrans('', '', string.punctuation))
+        return ' '.join(text.split())
+
+    def process_text(self, text):
+        text = self.split_and_lower(text)
+        text = self.compact_text(text)
+        text = self.clean_punctuation(text)
         return text
 
 cleaner = TextCleaner()
-new_data['type'] = new_data['type'].apply(cleaner.clean_text)
-new_data['director'] = new_data['director'].apply(cleaner.clean_text)
-new_data['cast'] = new_data['cast'].apply(cleaner.clean_text)
-new_data['rating'] = new_data['rating'].apply(cleaner.clean_text)
-new_data['listed_in'] = new_data['listed_in'].apply(cleaner.clean_text)
-new_data['description'] = new_data['description'].apply(cleaner.clean_text)
 
-# Combine features into a single string for each movie
-new_data['BoW'] = new_data[['type', 'director', 'cast', 'rating', 'listed_in', 'description']].apply(lambda row: ' '.join(row), axis=1)
+selected_data['type'] = selected_data['type'].apply(cleaner.compact_text)
+selected_data['director'] = selected_data['director'].apply(cleaner.split_and_lower)
+selected_data['cast'] = selected_data['cast'].apply(cleaner.split_and_lower)
+selected_data['rating'] = selected_data['rating'].apply(cleaner.compact_text)
+selected_data['listed_in'] = selected_data['listed_in'].apply(cleaner.split_and_lower)
+selected_data['description'] = selected_data['description'].apply(cleaner.clean_punctuation)
 
-# TF-IDF and Cosine Similarity
-tfid = TfidfVectorizer()
-tfid_matrix = tfid.fit_transform(new_data['BoW'])
-cosine_sim = cosine_similarity(tfid_matrix, tfid_matrix)
+# Combine cleaned columns into a Bag of Words
+selected_data['BoW'] = selected_data.apply(lambda row: ' '.join(row.dropna().values), axis=1)
+selected_data = selected_data[['BoW']]
 
-np.save('tfidf_matrix.npy', tfid_matrix)
-np.save('cosine_sim_matrix.npy', cosine_sim)
+# TF-IDF vectorization and similarity calculation
+tfidf_vectorizer = TfidfVectorizer()
+tfidf_matrix = tfidf_vectorizer.fit_transform(selected_data['BoW'])
+similarity_matrix = cosine_similarity(tfidf_matrix, tfidf_matrix)
 
+# Save the vectorizer and similarity matrix for future use
+np.save('tfidf_matrix.npy', tfidf_matrix)
+np.save('cosine_sim_matrix.npy', similarity_matrix)
 with open('tfidf_vectorizer.pkl', 'wb') as f:
-    pickle.dump(tfid, f)
+    pickle.dump(tfidf_vectorizer, f)
 
-final_data = netflix_data[['title', 'type']]
-final_data.to_csv('movie_data.csv', index=False)
+# Prepare the final data for recommendations
+final_dataset = netflix_data[['title', 'type']]
+final_dataset.to_csv('movie_data.csv', index=False)
 
+# Recommendation system class
 class Movies:
-    def __init__(self, df, cosine_sim):
-        self.df = df
-        self.cosine_sim = cosine_sim
-    
-    def recommendation(self, title, total_result=5, threshold=0.5):
-        idx = self.find_id(title)
-        if idx == -1:
-            return "Movie not found."
-        
-        # Calculate similarities and filter based on the threshold
-        similarities = self.cosine_sim[idx]
-        self.df['similarity'] = similarities
-        sorted_df = self.df.sort_values(by='similarity', ascending=False)
-        
-        # Filter out movies and TV shows below the threshold
-        sorted_df = sorted_df[sorted_df['similarity'] >= threshold]
-        
-        # Get movies and TV shows separately
-        movies = sorted_df[sorted_df['type'] == 'Movie']['title'].head(total_result)
-        tv_shows = sorted_df[sorted_df['type'] == 'TV Show']['title'].head(total_result)
-        
-        # Format the results
-        similar_movies = [f"{i+1}. {movie}" for i, movie in enumerate(movies)]
-        similar_tv_shows = [f"{i+1}. {tv_show}" for i, tv_show in enumerate(tv_shows)]
-        
-        return similar_movies, similar_tv_shows
+    def __init__(self, dataset, similarity_matrix):
+        self.dataset = dataset
+        self.similarity_matrix = similarity_matrix
 
-    def find_id(self, name):
-        # Search for movie by title
-        idx = self.df[self.df['title'].str.contains(name, case=False, na=False)].index
-        return idx[0] if len(idx) > 0 else -1
+    def get_recommendations(self, query_title, max_results=5, similarity_threshold=0.5):
+        index = self.find_title_index(query_title)
+        self.dataset['similarity'] = self.similarity_matrix[index]
+        sorted_dataset = self.dataset.sort_values(by='similarity', ascending=False)[1:max_results+1]
 
-# Example usage:
+        movie_recs = sorted_dataset['title'][sorted_dataset['type'] == 'Movie']
+        show_recs = sorted_dataset['title'][sorted_dataset['type'] == 'TV Show']
+
+        movie_list = ['{}. {}'.format(i + 1, movie) for i, movie in enumerate(movie_recs)]
+        show_list = ['{}. {}'.format(i + 1, show) for i, show in enumerate(show_recs)]
+
+        return movie_list, show_list
+
+    def find_title_index(self, title):
+        for idx, movie_title in enumerate(self.dataset['title']):
+            if re.search(title, movie_title, re.IGNORECASE):
+                return idx
+        return -1
+
+# Initialize and test the recommendation system
 movie_name = input("Enter a movie or TV show title: ")  # Prompt the user for input
 
-movie = Movies(final_data, cosine_sim)
-movies, tv_shows = movie.recommendation(movie_name, total_result=10, threshold=0.5)
+movie = Movies(final_dataset, similarity_matrix)
+recommended_movies, recommended_shows = movie.get_recommendations(movie_name, max_results=10, similarity_threshold=0.5)
 
 print('Similar Movie(s) list:')
-for movie in movies:
+for movie in recommended_movies:
     print(movie)
 
-print('\nSimilar TV Show(s) list:')
-for tv_show in tv_shows:
-    print(tv_show)
+print('\nSimilar TV_show(s) list:')
+for show in recommended_shows:
+    print(show)
