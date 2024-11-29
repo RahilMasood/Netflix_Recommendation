@@ -116,7 +116,7 @@ class Movies:
         return -1
 
 # Initialize and test the recommendation system
-movie_name = input("Enter a movie or TV show title: ")  # Prompt the user for input
+movie_name = input("Enter a movie or TV show title: ")
 
 movie = Movies(final_dataset, similarity_matrix)
 recommended_movies, recommended_shows = movie.get_recommendations(movie_name, max_results=10, similarity_threshold=0.5)
