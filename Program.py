@@ -121,7 +121,7 @@ movie_name = input("Enter a movie or TV show title: ")  # Prompt the user for in
 movie = Movies(final_dataset, similarity_matrix)
 recommended_movies, recommended_shows = movie.get_recommendations(movie_name, max_results=10, similarity_threshold=0.5)
 
-print('Similar Movie(s) list:')
+print('\nSimilar Movie(s) list:')
 for movie in recommended_movies:
     print(movie)
 
