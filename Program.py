@@ -8,10 +8,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 import warnings
 import re
 
-warnings.filterwarnings('ignore')
+# warnings.filterwarnings('ignore')
 
-# Load the Netflix dataset
-netflix_data = pd.read_csv(r"C:\Users\shez8\Desktop\RAHIL\Mini Projects\Movie Recommender\netflix_data.csv")
+# Load the Netflix dataset (Use the correct file path in your computer)
+netflix_data = pd.read_csv("./netflix_data.csv")
 netflix_data.fillna('', inplace=True)
 
 # Analyzing data distributions
