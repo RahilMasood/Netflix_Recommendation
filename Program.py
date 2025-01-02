@@ -14,19 +14,16 @@ import re
 netflix_data = pd.read_csv("./netflix_data.csv")
 netflix_data.fillna('', inplace=True)
 
-# Analyzing data distributions
 release_year_counts = netflix_data['release_year'].value_counts().sort_index()
 content_type_counts = netflix_data['type'].value_counts()
 top_countries = netflix_data['country'].value_counts().head(10)
 
-# Extracting ratings and durations
 rating_labels = list(netflix_data['rating'].value_counts().index)
 rating_values = list(netflix_data['rating'].value_counts().values)
 
 duration_labels = list(netflix_data['duration'].value_counts().index)
 duration_values = list(netflix_data['duration'].value_counts().values)
 
-# Generating word clouds for titles, descriptions, and genres
 all_titles = ' '.join(netflix_data['title'].values)
 title_wordcloud = WordCloud(background_color='black', colormap='Reds').generate(all_titles)
 
@@ -36,11 +33,9 @@ description_wordcloud = WordCloud(background_color='black', colormap='Reds').gen
 all_genres = ' '.join(netflix_data['listed_in'].values)
 genre_wordcloud = WordCloud(background_color='black', colormap='Reds').generate(all_genres)
 
-# Prepare the dataset for text processing
 selected_data = netflix_data[['title', 'type', 'director', 'cast', 'rating', 'listed_in', 'description']]
 selected_data.set_index('title', inplace=True)
 
-# Helper class for text cleaning
 class TextCleaner:
     def split_and_lower(self, text):
         unique_parts = set()
@@ -71,26 +66,21 @@ selected_data['rating'] = selected_data['rating'].apply(cleaner.compact_text)
 selected_data['listed_in'] = selected_data['listed_in'].apply(cleaner.split_and_lower)
 selected_data['description'] = selected_data['description'].apply(cleaner.clean_punctuation)
 
-# Combine cleaned columns into a Bag of Words
 selected_data['BoW'] = selected_data.apply(lambda row: ' '.join(row.dropna().values), axis=1)
 selected_data = selected_data[['BoW']]
 
-# TF-IDF vectorization and similarity calculation
 tfidf_vectorizer = TfidfVectorizer()
 tfidf_matrix = tfidf_vectorizer.fit_transform(selected_data['BoW'])
 similarity_matrix = cosine_similarity(tfidf_matrix, tfidf_matrix)
 
-# Save the vectorizer and similarity matrix for future use
 np.save('tfidf_matrix.npy', tfidf_matrix)
 np.save('cosine_sim_matrix.npy', similarity_matrix)
 with open('tfidf_vectorizer.pkl', 'wb') as f:
     pickle.dump(tfidf_vectorizer, f)
 
-# Prepare the final data for recommendations
 final_dataset = netflix_data[['title', 'type']]
 final_dataset.to_csv('movie_data.csv', index=False)
 
-# Recommendation system class
 class Movies:
     def __init__(self, dataset, similarity_matrix):
         self.dataset = dataset
@@ -115,7 +105,6 @@ class Movies:
                 return idx
         return -1
 
-# Initialize and test the recommendation system
 movie_name = input("Enter a movie or TV show title: ")
 
 movie = Movies(final_dataset, similarity_matrix)
